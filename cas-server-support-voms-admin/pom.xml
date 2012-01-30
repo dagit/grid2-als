@@ -1,0 +1,126 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.galois.grid2</groupId>
+  <artifactId>cas-server-support-voms-admin</artifactId>
+  <version>1.0.2</version>
+  <packaging>jar</packaging>
+
+  <name>cas-server-support-voms-admin</name>
+  <url>http://maven.apache.org</url>
+
+  <licenses>
+    <license>
+      <name>BSDv3</name>
+      <distribution>repo</distribution>
+      <url>http://grid2.galois.com/LICENSE</url>
+      <comments>
+      Acknowledgement
+      This material is based upon work supported by the Department of Energy under
+      Award Number DE-SC0002076
+
+      Disclaimer
+      This report was prepared as an account of work sponsored by an agency of the
+      United States Government. Neither the United States Government nor any agency
+      thereof, nor any of their employees, makes any warranty, express or implied, or
+      assumes any legal liability or responsibility for the accuracy, completeness,
+      or usefulness of any information, apparatus, product, or process disclosed, or
+      represents that its use would not infringe privately owned rights. Reference
+      herein to any specific commercial product, process, or service by trade name,
+      trademark, manufacturer, or otherwise does not necessarily constitute or imply
+      its endorsement, recommendation, or favoring by the United States Government or
+      any agency thereof. The views and opinions of authors expressed herein do not
+      necessarily state or reflect those of the United States Government or any
+      agency thereof.
+
+      SBIR/STTR Rights Notice
+      These SBIR/STTR data are furnished with SBIR/STTR rights under Grant No.
+      DE-SC0002076. For a period of four (4) years after acceptance of all items to
+      be delivered under this grant, the Government agrees to use these data for
+      Government purposes only, and they shall not be disclosed outside the
+      Government (including disclosure for procurement purposes) during such period
+      without permission of the grantee, except that, subject to the foregoing use
+      and disclosure prohibitions, such data may be disclosed for use by support
+      contractors. After the aforesaid four-year period, the Government has a
+      royalty-free license to use, and to authorize others to use on its behalf,
+      these data for Government purpose, but is relieved of all disclosure
+      prohibitions and assumes no liability for unauthorized use of these data by
+      third parties. This Notice shall be affixed to any reproductions of these data
+      in whole or in part.
+      </comments>
+    </license>
+  </licenses>
+
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+
+  <distributionManagement>
+    <repository>
+       <id>releases</id>
+       <name>releases</name>
+       <url>${releases.url}</url>
+    </repository>
+    <snapshotRepository>
+       <id>releases</id>
+       <name>releases</name>
+       <url>${snapshots.url}</url>
+    </snapshotRepository>
+  </distributionManagement>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>2.3.2</version>
+        <configuration>
+          <source>1.5</source>
+          <target>1.5</target>
+        </configuration>
+      </plugin>
+    </plugins>
+
+    <extensions>
+      <extension>
+       <groupId>org.apache.maven.wagon</groupId>
+       <artifactId>wagon-ssh-external</artifactId>
+       <!-- currently working w/ latest, 2.0
+            <version>2.0</version>
+       -->
+      </extension>
+    </extensions>
+  </build>
+
+  <dependencies>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>3.8.1</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+    	<groupId>org.jasig.cas</groupId>
+    	<artifactId>cas-server-core</artifactId>
+    	<version>3.4.10</version>
+    </dependency>
+    <dependency>
+    	<groupId>org.jasig.cas</groupId>
+    	<artifactId>cas-server-support-x509</artifactId>
+    	<version>3.4.10</version>
+    </dependency>
+    <dependency>
+    	<groupId>commons-discovery</groupId>
+    	<artifactId>commons-discovery</artifactId>
+    	<version>0.5</version>
+    	<scope>test</scope>
+    </dependency>
+    <dependency>
+    	<groupId>com.galois.grid2</groupId>
+    	<artifactId>voms-attribute-fetcher</artifactId>
+    	<version>1.0.2</version>
+    </dependency>
+  </dependencies>
+</project>

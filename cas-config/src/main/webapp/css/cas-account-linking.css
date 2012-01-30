@@ -1,0 +1,16 @@
+
+#cas div#login.account-linking {
+	width: auto;
+}
+
+.account-linking th {
+	text-align: right;
+}
+
+.account-linking-summary td {
+	vertical-align: top;
+}
+
+.account-linking-summary table {
+	margin-bottom: 2em;	
+}

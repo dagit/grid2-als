@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:p="http://www.springframework.org/schema/p"
+       xmlns:sec="http://www.springframework.org/schema/security" xmlns:grid="http://www.galois.com/schema/gridns"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.0.xsd
+                           http://www.springframework.org/schema/security http://www.springframework.org/schema/security/spring-security-3.0.xsd
+                           http://www.galois.com/schema/gridns http://www.galois.com/schema/gridns/schema.xsd">
+  <bean id="accountLinkingConfig" class="com.galois.grid2.AccountLinkingConfig">
+    <constructor-arg>
+      <value>http://www.example.com/</value>
+    </constructor-arg>
+    <constructor-arg>
+      <list>
+        <bean class="com.galois.grid2.NamespaceDefinition">
+          <constructor-arg value="ldap" />
+          <constructor-arg>
+            <bean class="com.galois.grid2.converters.UsernamePasswordCredentialsConverter" />
+          </constructor-arg>
+          <constructor-arg ref="ldapDao" />
+        </bean>
+        <bean class="com.galois.grid2.NamespaceDefinition">
+          <constructor-arg value="x509" />
+          <constructor-arg>
+            <bean class="com.galois.grid2.converters.X509CertificateCredentialsConverter" />
+          </constructor-arg>
+          <constructor-arg ref="vomsDao" />
+        </bean>
+      </list>
+    </constructor-arg>
+  </bean>
+
+  <bean id="accountLinkingStorage" class="com.galois.grid2.store.AutomaticLinkingStorage">
+    <constructor-arg>
+      <bean class="com.galois.grid2.store.HibernateAccountLinkingStorage">
+        <constructor-arg>
+          <!-- Use a default configuration which looks for hibernate.cfg.xml in 
+               the classpath. -->
+          <bean id="entityManagerFactory"
+                class="org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean">
+            <property name="dataSource" ref="dataSource" />
+            <property name="persistenceUnitName" value="Grid2Persistence" />
+            <property name="jpaVendorAdapter">
+              <bean class="org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter">
+                <property name="showSql" value="true" />
+                <property name="generateDdl" value="true" />
+                <property name="databasePlatform" value="org.hibernate.dialect.MySQL5Dialect" />
+              </bean>
+            </property>
+          </bean>
+        </constructor-arg>
+        <constructor-arg>
+          <bean factory-bean="accountLinkingConfig" factory-method="getConverters" />
+        </constructor-arg>
+      </bean>
+    </constructor-arg>
+    <constructor-arg>
+      <bean class="com.galois.grid2.converters.UsernamePasswordLocalNameExtractor" />
+    </constructor-arg>
+  </bean>
+
+  <bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource"
+        destroy-method="close">
+    <property name="driverClassName" value="com.mysql.jdbc.Driver" />
+    <property name="url" value="jdbc:mysql://localhost/cas_account_linking" />
+    <property name="username" value="account_linking" />
+    <property name="password" value="" />
+    <!-- kill idle connections after 30 seconds -->
+    <property name="MinEvictableIdleTimeMillis" value="30000" />
+    <!-- check for idel connections every 10 seconds -->
+    <property name="timeBetweenEvictionRunsMillis" value="10000" />
+    <!-- number of allowed idle connections, -1 for none -->
+    <property name="numTestsPerEvictionRun" value="-1" />
+    <!-- keep at least one connection idling by recreating after clean up -->
+    <property name="minIdle" value="1" />
+
+  </bean>
+
+  <pipeline xmlns="http://www.galois.com/schema/gridns" id="vomsDao">
+
+    <bean class="com.galois.grid2.VOMSAttributeDao" xmlns="http://www.springframework.org/schema/beans">
+      <constructor-arg>
+        <bean class="com.galois.grid2.voms.SOAPAttributeFetcher"
+              factory-method="defaultConfig">
+          <constructor-arg>
+            <map>
+              <entry key="keystore" value="${catalina.base}/conf/idservtest.jks" />
+              <entry key="clientauth" value="true" />
+              <entry key="keystorePassword" value="idservtest" />
+              <entry key="keypass" value="idservtest" />
+              <entry key="keystoreType" value="JKS" />
+            </map>
+          </constructor-arg>
+          <constructor-arg
+              value="https://grid2-vo-test.dev.galois.com:8443/voms/grid2vo/services">
+          </constructor-arg>
+        </bean>
+      </constructor-arg>
+    </bean>
+
+    <convertAttribute nameIn="voms-group" nameOut="group">
+      <convertValue from="/grid2vo" to="vo-member" />
+      <convertValue from="/grid2vo/extraGroup" to="extra-group" />
+    </convertAttribute>
+
+  </pipeline>
+
+  <merge xmlns="http://www.galois.com/schema/gridns" id="ldapDao">
+    <pipeline>
+      <convertAttribute nameIn="username" nameOut="uid" />
+
+      <bean xmlns="http://www.springframework.org/schema/beans"
+            class="org.jasig.services.persondir.support.ldap.LdapPersonAttributeDao">
+        <property name="baseDN"
+                  value="cn=users,cn=accounts,dc=grid2,dc=dev,dc=galois,dc=com" />
+        <property name="contextSource" ref="grid2IPALDAP" />
+      </bean>
+
+      <convertAttribute nameIn="cn" nameOut="full-name" />
+    </pipeline>
+
+    <pipeline>
+      <format id="memberQueryDao"
+              nameOut="member"
+              format="uid=${username},cn=users,cn=accounts,dc=grid2,dc=dev,dc=galois,dc=com" />
+
+      <bean xmlns="http://www.springframework.org/schema/beans"
+            class="org.jasig.services.persondir.support.ldap.LdapPersonAttributeDao">
+        <property name="baseDN"
+                  value="cn=groups,cn=accounts,dc=grid2,dc=dev,dc=galois,dc=com" />
+        <property name="ldapTemplate">
+          <bean class="com.galois.grid2.persondir.GroupLdapTemplate">
+            <property name="contextSource" ref="grid2IPALDAP" />
+          </bean>
+        </property>
+      </bean>
+
+      <convertAttribute nameIn="cn" nameOut="group">
+        <convertValue from="ipausers" to="vo-member" />
+        <convertValue from="extragroup" to="extra-group" />
+      </convertAttribute>
+    </pipeline>
+
+  </merge>
+
+</beans>

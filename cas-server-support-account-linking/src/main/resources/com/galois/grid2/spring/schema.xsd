@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schema xmlns="http://www.w3.org/2001/XMLSchema" targetNamespace="http://www.galois.com/schema/gridns"
+	xmlns:beans="http://www.springframework.org/schema/beans"
+	elementFormDefault="qualified" attributeFormDefault="unqualified">
+	<import namespace="http://www.springframework.org/schema/beans" />
+
+	<element name="format">
+		<complexType>
+			<complexContent>
+				<extension base="beans:identifiedType">
+					<attribute name="nameOut" type="string" use="required"></attribute>
+					<attribute name="format" type="string" use="required"></attribute>
+				</extension>
+			</complexContent>
+		</complexType>
+	</element>
+
+	<element name="pipeline">
+		<complexType>
+			<complexContent>
+				<extension base="beans:identifiedType">
+					<sequence>
+						<any minOccurs="1" maxOccurs="unbounded"/>
+					</sequence>
+				</extension>
+			</complexContent>
+		</complexType>
+	</element>
+
+	<element name="merge">
+		<complexType>
+			<complexContent>
+				<extension base="beans:identifiedType">
+					<sequence>
+						<any minOccurs="1" maxOccurs="unbounded"/>
+					</sequence>
+				</extension>
+			</complexContent>
+		</complexType>
+	</element>
+
+	<element name="convertAttribute">
+		<complexType>
+			<complexContent>
+				<extension base="beans:identifiedType">
+					<sequence>
+						<element name="convertValue" minOccurs="0" maxOccurs="unbounded">
+							<complexType>
+								<attribute name="from" type="string"
+									use="required">
+								</attribute>
+								<attribute name="to" type="string"
+									use="required">
+								</attribute>
+							</complexType>
+						</element>
+					</sequence>
+					<attribute name="nameIn" type="string" use="required"></attribute>
+					<attribute name="nameOut" type="string"></attribute>
+				</extension>
+			</complexContent>
+		</complexType>
+	</element>
+</schema>
