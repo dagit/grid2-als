@@ -1,0 +1,25 @@
+Contents:
+
+ docs: Documentation about using the ALS extension.
+
+ cas-config: Example configuration for deploying CAS with the ALS
+   extension.
+
+ cas-server-support-account-linking: Java project that implements
+   account linking and persistence.
+
+ cas-server-support-voms-admin: Java code that extends a CAS server to
+   support interfacing with VOMS-Admin to get user attributes.
+
+ voms-admin-soap-api: Java project that provides a basic SOAP client
+   for accessing VOMS-Admin.
+
+ voms-attribute-fetcher: Java project that provides a higher-level
+   wrapper around the VOMS-Admin SOAP API.
+
+ voms-attribute-client: Java project that is a simple executable that
+   does a test of the voms-attribute-fetcher.
+
+ setup-java-dev.sh: Invoke maven on all of the relevant Java packages
+   so that their dependencies are installed and they are configured
+   for use in Eclipse.

@@ -1,0 +1,623 @@
+
+CAS Account Linking Support
+---------------------------
+
+This document provides an overview and details for configuring CAS
+with account-linking support and attribute translation.  We do not
+assume the reader is familiar with CAS configuration idioms.  We do,
+however, assume the reader is familiar with the basic functionality of
+CAS, as well as Java technology in general.
+
+Account Linking
+===============
+
+The "account-linking" extension to CAS allows a user to authenticate
+in multiple ways and "link" the provided credentials together.  Once
+credentials are linked, CAS can query each authentication server
+associated with the user's credentials and merge the resulting user
+attributes into a single set for release to the CAS client.  One
+motivation for this feature arises when a user has multiple
+credentials but cannot or does not want to remember them all.  Another
+motivation arises when the user posesses credentials issued by a third
+party, such an X.509 client certificate, which should be associated
+with a preexisting account.
+
+Attribute Translation
+=====================
+
+Account linking makes it possible to create a mapping between two or
+more different sets of credentials.  However, the attributes available
+from these different sources may differ in their names and meanings.
+CAS fetches user attributes from attribute authorities associated with
+the user's authentication.  The attributes returned by these
+authorities will, in all likelihood, use different names or have
+different semantics.  As a result, we must specify how attributes from
+different authorities should be "translated" into values which are
+consistent with each other and meaningful in the context of the local
+application environment.
+
+To address this, CAS has been extended to allow administrators to
+express translation rules in the CAS configuration.  The changes
+support translation rules including attribute renaming, introducing
+new attribute values, or changing existing attribute values.
+
+How Account Linking Works
+-------------------------
+
+CAS account linking provides a way to link multiple credentials
+together, but in particular, it provides a way to "normalize"
+third-party credentials and attributes into the so-called "local"
+application environment.  "Local" applications are those deployed
+within an organization where CAS authentication and attributes are
+used.  Third-party credentials and attributes are those issued by
+other organizations, authentication services, or attribute
+authorities, which may be on- or off-site.
+
+In order to normalize third-party credentials and attributes, we need
+to tell CAS which authentication method and attribute repository
+represents our notion of "local" accounts.  These accounts represent
+the user's primary credential used to access local services.  In this
+document, an authentication service together with an attribute
+authority is called a "namespace."
+
+Other non-local ("remote") namespaces can also be configured.  These
+namespaces represent the authentication and attribute authority
+settings for specified types of third-party credential.  For example,
+a third-party credential such as X.509 client certificate may be
+configured as a namespace, optionally with an attribute authority such
+as VOMS.
+
+Account linking works by linking one or more third-party credentials
+to a single local account.  Linked credentials make it possible to
+authenticate with one credential but use attributes from another
+(linked) credential.  CAS will fetch attributes for each namespace and
+will then merge the resulting attributes into a single set of
+attributes for release to the CAS client.
+
+User Experience
+===============
+
+The user experience for account linking is as follows:
+
+ - A user authenticates to CAS with one of the supported
+   authentication methods.
+
+ - If the chosen method is associated with the "local" namespace, the
+   user's local account and any associated remote credentials are used
+   to fetch attributes and the user is returned to the CAS client.
+
+ - If the chosen method is associated with a non-local namespace, CAS
+   looks for a local account linked to the third-party credential
+   which the user provided.
+
+   - If a local account is associated with the third-party credential,
+     the user's local account and any associated remote credentials
+     are used to fetch attributes and the user is returned to the
+     CAS client.
+
+   - If a local account is not associated with the third-party
+     credential, a page summarizing third-party credentials is shown.
+     On this page the user is instructed to authenticate with a local
+     account or click a link (provided by the administrator) which
+     will take her to a local account provisioning service.
+
+CAS Configuration
+-----------------
+
+In this section we provide a detailed tour of the configuration syntax
+for account linking and attribute translation.  We'll assume we're
+editing the CAS XML configuration file typically named
+"deployerConfigContext.xml", typically found in
+"src/main/webapp/WEB-INF/" in the application codebase.
+
+CAS Configuration Introduction
+==============================
+
+CAS uses the Java Spring framework [1] for configuration processing.
+Spring works by reading XML configuration files which define a
+collection of "bean definitions."  These definitions are XML elements
+which describe Java "bean" objects, which are Java objects which
+follow certain conventions.  These bean definitions are processed by
+Spring and used to dynamically instantiate the appropriate types of
+Java objects to configure CAS.  Examples of objects created in this
+way are the authentication manager, database connections, view
+loaders, attribute sources, and so on.
+
+Each bean definition looks like this:
+
+  <bean id="..." class="...">
+    <constructor-arg>...</constructor-arg>
+    <constructor-arg>...</constructor-arg>
+    ...
+  </bean>
+
+The bean's "class" is a fully-qualified Java class name such as
+"com.galois.grid2.AccountLinkingConfig" and is instantiated by Spring
+with the constructor arguments specified in the bean definition.
+
+The bean's "id" is the name we use to refer to the object it
+represents.  We can use the bean ID to reference the object in
+multiple places in the configuration so that references to the object
+get passed to the constructors of other Java classes, e.g.,
+
+  <bean ...>
+    <constructor-arg ref="someID" />
+  </bean>
+
+The example above assumes that some bean with id="someID" is defined
+elsewhere in the configuration.
+
+Account Linking Storage
+=======================
+
+First, we define a database connection bean.  This bean definition
+requires the presence of JDBC connection support for MySQL as well as
+a MySQL database with permissions consistent with this configuration.
+We recommend that you change the following fields as appropriate
+for your deployment:
+
+ * username
+ * password
+ * database connection url ("url" attribute value)
+
+  <bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource"
+        destroy-method="close">
+    <property name="driverClassName" value="com.mysql.jdbc.Driver" />
+    <property name="url" value="jdbc:mysql://localhost/cas_account_linking" />
+    <property name="username" value="account_linking" />
+    <property name="password" value="" />
+  </bean>
+
+Next, we define a Hibernate account linking storage bean, which uses
+the database connection to store account linkage information.  This
+bean will initialize the Hibernate persistence library and look for a
+"hibernate.cfg.xml" in the class path; that file is included with the
+source distribution of the cas-server-support-account-linking library.
+The Hibernate library will also take care of creating any necessary
+database tables.
+
+  <bean id="hibernateStorage"
+        class="com.galois.grid2.store.HibernateAccountLinkingStorage">
+    <constructor-arg>
+      <bean id="entityManagerFactory"
+            class="org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean">
+        <property name="dataSource" ref="dataSource" />
+        <property name="persistenceUnitName" value="Grid2Persistence" />
+        <property name="jpaVendorAdapter">
+          <bean class="org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter">
+            <property name="showSql" value="true" />
+            <property name="generateDdl" value="true" />
+            <property name="databasePlatform" value="org.hibernate.dialect.MySQL5Dialect" />
+          </bean>
+        </property>
+      </bean>
+    </constructor-arg>
+    <constructor-arg>
+      <bean factory-bean="accountLinkingConfig" factory-method="getConverters" />
+    </constructor-arg>
+  </bean>
+
+In general, the only thing we need to change above is the "ref"
+attribute value of the property which sets the "dataSource".  The
+"ref" attribute value should be the "id" of the data source bean we
+created previously.  If you used the default name of "dataSource", no
+change is necessary here.
+
+Next, we define an account linking storage bean.  This bean
+configuration dictates the storage backend parameters used to store
+and retrieve account linkage information.  We start with the following
+XML, placed at the top level (as a child of the 'beans' document root
+element):
+
+  <bean id="accountLinkingStorage"
+        class="com.galois.grid2.store.AutomaticLinkingStorage">
+    <constructor-arg ref="hibernateStorage" />
+
+    <constructor-arg>
+      <bean class="com.galois.grid2.converters.UsernamePasswordLocalNameExtractor" />
+    </constructor-arg>
+  </bean>
+
+The constructor arguments to this bean indicate the account linking
+storage implementations which should be used (defined above) as well
+as the "local name extractor" for the account linking storage.  This
+setting is critical because it determines how the account linking
+storage automatically extracts local names from credentials.  The name
+extractor implementation used here MUST match the type of credentials
+associated with your local namespace.  For instance, if your local
+namespace is an LDAP authentication server, the username/password
+extractor is the right implementation to use here.
+
+Attribute Repository Bean
+=========================
+
+CAS requires the definition of a main "attribute repository" bean
+which it uses to get the names of attributes which can be released.
+In order to make this configuration consistent with the account
+linking credentials resolver configured below, we need to use the
+account linking configuration to build an attribute repository object.
+We do this with the following bean definition.  There is no need to
+change it unless you have changed the IDs of the beans it references:
+
+  <bean id="attributeRepository"
+        factory-bean="accountLinkingConfig"
+        factory-method="buildAttributeRepository">
+    <constructor-arg ref="accountLinkingStorage" />
+  </bean>
+
+The Authentication Manager
+==========================
+
+CAS requires the definition of an "authentication manager" bean which
+it uses to process credentials upon user authentication.  This object
+is used to process all credentials regardless of their type, and
+within this object there are one or more "resolvers" which resolve
+certain kinds of credentials into "principal" objects, which are the
+representation of the user and her attributes.  Your default CAS
+configuration probably already has a bean defined as the
+"authenticationManager".  If it does, you will need to add or replace
+the first entry of the "list" in the first constructor argument so
+that it contains the "accountLinkingResolver" bean definition as
+follows:
+
+  <bean id="authenticationManager"
+        class="org.jasig.cas.authentication.AuthenticationManagerImpl">
+    <property name="credentialsToPrincipalResolvers">
+      <list>
+        <bean id="accountLinkingResolver"
+              factory-bean="accountLinkingConfig"
+              factory-method="buildCredentialsToPrincipalResolver">
+          <constructor-arg ref="accountLinkingStorage" />
+        </bean>
+        ...
+      </list>
+    </property>
+  </bean>
+
+No changes should be necessary to the "accountLinkingResolver" bean
+definition unless you have changed the names of the beans it
+references.
+
+Account Linking Config
+======================
+
+The next bean definition we will create is that of the
+'accountLinkingConfig' bean, which summarizes all of the settings of
+the account linking feature.  This bean defines:
+
+ - the namespaces between which account linking will be possible
+
+ - the local account provisioning URL to which users should be sent if
+   a local account is needed
+
+An example bean definition is as follows:
+
+  <bean id="accountLinkingConfig"
+        class="com.galois.grid2.AccountLinkingConfig">
+    <constructor-arg>
+      <!-- Local account provisioning URL -->
+      <value>http://www.example.com/</value>
+    </constructor-arg>
+    <constructor-arg>
+      <list>
+        <bean class="com.galois.grid2.NamespaceDefinition">
+          <constructor-arg value="ldap" />
+          <constructor-arg>
+            <bean class="com.galois.grid2.converters.UsernamePasswordCredentialsConverter" />
+          </constructor-arg>
+          <constructor-arg ref="ldapDao" />
+        </bean>
+        <bean class="com.galois.grid2.NamespaceDefinition">
+          <constructor-arg value="x509" />
+          <constructor-arg>
+            <bean class="com.galois.grid2.converters.X509CertificateCredentialsConverter" />
+          </constructor-arg>
+          <constructor-arg ref="vomsDao" />
+        </bean>
+      </list>
+    </constructor-arg>
+  </bean>
+
+The settings you might want to change are:
+
+ - The first constructor argument to the bean,
+   "http://www.example.com/".  This URL is the URL that users will be
+   given if they need a local account to link to a third-party
+   credential.
+
+ - The contents of the "list" of the second constructor argument.
+   This list enumerates the namespaces between which account linking
+   will be possible.  Credentials in one namespace will be linked to
+   credentials in other namespaces.
+
+Each namespace must be an instance of
+"com.galois.grid2.NamespaceDefinition".  Each namespace has:
+
+ - A name which you assign to it.  This name MUST never change once
+   you have deployed your configuration, since the name of the
+   namespace will be associated with any credentials used to
+   authenticate to its authentication service.
+
+ - A "credentials converter".  The credentials converter must be a
+   Java class which implements "com.galois.grid2.RemoteNameConverter".
+   Implementations of this interface are responsible for taking a
+   concrete type of "Credentials" object and extracting the attributes
+   from the credentials that are required to fetch attributes from the
+   attribute service associated with the credentials.  For example,
+   when using LDAP for authentication and attributes, a
+   UsernamePasswordCredentialsConverter is necessary to extract the
+   "username" from the credentials for use with an
+   LdapPersonAttributeDao.  An X.509 client certificate requires an
+   X509CertificateCredentialsConverter for use with an
+   IPersonAttributeDao implementation such as VOMSAttributeDao.
+
+ - An underlying "IPersonAttributeDao" implementation.  This object is
+   responsible for fetching attributes from an attribute authority
+   associated with the namespace.  In the case of LDAP, this would be
+   an LdapPersonAttributeDao; in the case of VOMS, it would be a
+   VOMSAttributeDao.
+
+An example of a NamespaceDefinition bean follows:
+
+  <bean class="com.galois.grid2.NamespaceDefinition">
+    <constructor-arg value="ldap" />
+    <constructor-arg>
+      <bean class="com.galois.grid2.converters.UsernamePasswordCredentialsConverter" />
+    </constructor-arg>
+    <constructor-arg ref="ldapDao" />
+  </bean>
+
+In the namespace definition above, the name of the namespace is
+"ldap", the type of credentials for authentication in that namespace,
+"UsernamePasswordCredentials", are processed by a corresponding
+credentials converter.
+
+Note that there are a few important requirements in the namespace
+configuration:
+
+ - One of the namespaces listed MUST use credentials supported by the
+   local name extractor implementation that you chose in the
+   "accountLinkingStorage" bean definition.  The namespace that uses
+   that type of credentials will be treated as the "local" namespace
+   and an account in that namespace will be required to do any account
+   linking.
+
+ - The settings of the namespaces, once configured, cannot be changed
+   once the service is being used by users.  The names of the
+   namespaces are stored in the account linking database and are used
+   to determine account linkages.  It is only safe to change these
+   names if you do not yet have any linked accounts in the
+   namespace(s) in question.  This applies to the other settings as
+   well, since they are used to determine what data is stored in the
+   account linking database and this will influence future account
+   linking database lookups.  It will also influence how attribute
+   authorities are queried.
+
+Attribute Translation Support
+=============================
+
+The IPersonAttributeDao interface is the mechanism by which CAS
+fetches user attributes from attribute authorities.  The account
+linking support also uses IPersonAttributeDao implementations to fetch
+attributes for each of its namespaces.  Each namespace's DAO
+implementation may return attributes with different semantics, so we
+provide machinery to translate attributes from each of the namespaces
+into a common form that can be merged into a final set of user
+attributes.
+
+CAS provides a variety of IPersonAttributeDao implementations which
+perform a variety of tasks on their inputs and outputs.  We extend
+this set of implementations with an additional DAO implementation, the
+AttributeTranslatingDao, which is capable of translating the name
+and/or value of an attribute.
+
+We also provide a set of custom XML tags which can be used to simplify
+Spring XML configuration when declaring the IPersonAttributeDao for
+each namespace.  These tags represent DAO implementations themselves,
+and are intended to be used in place of concrete DAO implementations.
+The tags provided are:
+
+  - "pipeline": a tag which takes as children an ordered list of DAO
+    implementations.  The pipeline works by feeding the pipeline's
+    query attributes to the first DAO in the pipeline, then feeding
+    the results of that DAO to the input of the next DAO, etc., and
+    pipeline's last DAO returns the resulting attributes of the
+    pipeline.  In this way, we can perform different transformations
+    on the attribute set at each "step" in the pipeline.  Under the
+    hood, the pipeline tag creates a PipelinePersonAttributeDao.
+
+  - "convertAttribute": a tag which declares that an attribute's name
+    and/or value should be changed.  This can be used to match
+    attributes and change them into different values.  If a value
+    conversion is desired, introduce a "convertValue" tag to match a
+    "from" attribute value and change it to a "to" attribute value.
+
+  - "merge": a tag which takes as children a set of DAO
+    implementations.  Each DAO is invoked with the merge DAO's query
+    attributes and the results are merged with the
+    MergingPersonAttributeDaoImpl.
+
+  - "format": a tag which can construct a new attribute from a format
+    string.  The format string can reference the values of existing
+    attributes.
+
+Attribute Translation Configuration
+===================================
+
+To use the attribute translation XML tags, you'll need to add an XML
+schema declaration to the top-level tag in your CAS configuration,
+e.g.,
+
+  <beans xmlns="http://www.springframework.org/schema/beans"
+         ...
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns:grid="http://www.galois.com/schema/gridns"
+         xsi:schemaLocation="http://www.galois.com/schema/gridns
+                             http://www.galois.com/schema/gridns/schema.xsd">
+
+Note that the namespace and schema URIs are separated by whitespace
+within the "schemaLocation" attribute.  This adds the schema location
+as well as an XML namespace alias for the custom tags.
+
+A complete example attribute translation configuration for a single
+namespace follows (assuming a default namespace of
+"http://www.springframework.org/schema/beans").  We assume the
+definition of two concrete DAOs (e.g., for LDAP or other services)
+defined with bean IDs "concreteDao1" and "concreteDao2".
+
+  <grid:merge id="myDao">
+    <grid:pipeline>
+      <grid:format nameOut="queryAttr"
+                   format="username=${username}" />
+
+      <grid:convertAttribute nameIn="username" nameOut="uid" />
+
+      <ref bean="concreteDao1"/>
+
+      <grid:convertAttribute nameIn="group">
+        <grid:convertValue from="admins" to="administrators" />
+      </grid:convertAttribute>
+    </grid:pipeline>
+
+    <ref bean="concreteDao2"/>
+  </grid:merge>
+
+The top-level "merge" IPersonAttributeDao merges the attributes
+resulting from the "pipeline" DAO and the "concreteDao2" DAO.
+
+The pipeline DAO functions as follows:
+
+ - The query attributes, based on the user's credentials, are passed
+   to the first "format" DAO.  A new attribute, "queryAttr", is
+   inserted into the attribute collection and its value is built from
+   the specified format string.  The format string can reference
+   existing attributes with the "$..." syntax.
+
+ - The new query attributes, including "queryAttr", are passed to the
+   "convertAttribute" DAO.  This DAO will rename a "username"
+   attribute to "uid" but will not change its value.
+
+ - The next DAO is specified elsewhere, and may query an external
+   attribute authority with the query attributes built so far.
+
+ - The result of the concrete DAO is passed to a "convertAttribute"
+   DAO.  This DAO will look for a "group" attribute and change its
+   value to "administrators" if its value is "admins".
+
+Attribute Release
+=================
+
+Once you have configured your attribute translation (if any), the
+attributes which you want to release to CAS clients must be configured
+in the "serviceRegistryDao" bean definition.  This bean defines a
+series of "RegisteredServiceImpl" beans, each of which can declare
+which attributes may be released to clients using that service based
+on the clients' service URL protocol, domain, etc.  The registered
+service bean matches the relying party's return URL (configured in the
+client's CAS configuration) against the pattern in the "serviceId"
+property.
+
+For example, the child bean of "serviceRegistryDao" whose "serviceId"
+property matches relying parties of interest should declare the list
+of attributes to be released to those relying parties.  The
+"allowedAttributes" property of this bean should list the names of
+attribute to be released.  The names must match the attribute
+translation and DAO configuration (i.e., they must be the names of
+attributes which were actually created or modified by the DAO
+configuration).  Here is an example in which we declare that
+attributes named "role", "full-name", and "group" should be released
+to non-SSL relying parties:
+
+  <bean id="serviceRegistryDao"
+        class="org.jasig.cas.services.InMemoryServiceRegistryDaoImpl">
+    <property name="registeredServices">
+      <list>
+        <bean class="org.jasig.cas.services.RegisteredServiceImpl">
+          <property name="name" value="HTTP" />
+          <property name="description" value="Only Allows HTTP Urls" />
+          <property name="serviceId" value="http://**" />
+          <property name="allowedAttributes">
+            <list>
+              <value>role</value>
+              <value>full-name</value>
+              <value>group</value>
+            </list>
+          </property>
+        </bean>
+      </list>
+    </property>
+  </bean>
+
+And an example for SSL-enabled relying parties:
+
+  <bean id="serviceRegistryDao"
+        class="org.jasig.cas.services.InMemoryServiceRegistryDaoImpl">
+    <property name="registeredServices">
+      <list>
+        <bean class="org.jasig.cas.services.RegisteredServiceImpl">
+          <property name="name" value="HTTPS" />
+          <property name="description" value="Only Allows HTTPS Urls" />
+          <property name="serviceId" value="https://**" />
+          <property name="allowedAttributes">
+            <list>
+              <value>secure-group</value>
+            </list>
+          </property>
+        </bean>
+      </list>
+    </property>
+  </bean>
+
+Secure LDAP Connections
+=======================
+
+The type of connection to the ldap server, plain text or SSL/TLS, is determined
+by the URL scheme of the LdapContextSource bean.  For most configurations,
+plain-text connections on port 389 can use "ldap" and SSL/TLS connections on
+port 636 can use "ldaps".  To use a port other than the default, add it to the
+url, for example: ldap://example.com:9000
+
+If your ldap server requires plain-text connections but you want to use
+SSL/TLS, you can try configuring CAS to issue a StartTLS request to the LDAP
+server.
+
+To require StartTLS, add this bean definition:
+   <bean id="authenticationStrategy"
+     class="org.springframework.ldap.core.support.DefaultTlsDirContextAuthenticationStrategy" />
+
+Then add a reference to "authenticationStrategy" to the LdapContextSource bean definition:
+  <bean id="grid2IPALDAP" class="org.springframework.ldap.core.support.LdapContextSource">
+    <property name="pooled" value="false" />
+    <property name="url" value="ldap://example.com" />
+
+    <!-- issue start tls request on every connection -->
+    <property name="AuthenticationStrategy" ref="authenticationStrategy" />
+
+    <property name="baseEnvironmentProperties">
+      <map>
+        <entry key="com.sun.jndi.ldap.connect.timeout" value="3000" />
+        <entry key="com.sun.jndi.ldap.read.timeout" value="3000" />
+      </map>
+    </property>
+  </bean>
+
+Note: With OpenLDAP, explicit use of StartTLS and an "ldaps" URL are mutually
+exclusive.  Therefore, we recommend using "ldaps" and only adding the StartTLS
+request if "ldap" URLs are required.
+
+Creating a CAS WAR Overlay
+==========================
+
+To create a CAS WAR containing CAS and the account linking extensions,
+run this command in the "cas-config" directory:
+
+  mvn package
+
+The resulting WAR in target/ can be deployed with CAS in the typical
+way, i.e., by copying it to your web apps directory.
+
+References
+==========
+
+[1] Spring Framework
+    http://www.springsource.org/
