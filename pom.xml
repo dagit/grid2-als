@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <packaging>pom</packaging>
+
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.galois.grid2</groupId>
+  <artifactId>als</artifactId>
+  <name>als</name>
+  <version>1.0.2</version>
+  <description>Account Linking Service (ALS)</description>
+
+  <licenses>
+    <license>
+      <name>Apache 2</name>
+      <distribution>repo</distribution>
+      <url>http://www.apache.org/licenses/LICENSE-2.0</url>
+    </license>
+  </licenses>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+
+  <distributionManagement>
+    <repository>
+       <id>releases</id>
+       <name>releases</name>
+       <url>${releases.url}</url>
+    </repository>
+    <snapshotRepository>
+       <id>releases</id>
+       <name>releases</name>
+       <url>${snapshots.url}</url>
+    </snapshotRepository>
+  </distributionManagement>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>2.3.2</version>
+        <configuration>
+          <source>1.5</source>
+          <target>1.5</target>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+
+  <modules>
+    <module>cas-server-support-account-linking</module>
+    <module>cas-server-support-voms-admin</module>
+    <module>voms-attribute-client</module>
+    <module>voms-attribute-fetcher</module>
+    <module>voms-admin-soap-api</module>
+    <module>cas-config</module>
+  </modules>
+</project>
